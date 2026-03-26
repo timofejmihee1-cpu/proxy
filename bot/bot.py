@@ -155,8 +155,8 @@ def get_cmd(m):
         res += (
             "⚠️ **ВНИМАНИЕ:**\n"
             "Некоторые прокси могут не работать из-за ограничений твоего **оператора** или **Wi-Fi**. "
-            "Если не грузит — попробуй следующий из списка."
-            "подпишись на https://t.me/proxy_timoxa"
+            "Если не грузит — попробуй следующий из списка.  подпишись на https://t.me/proxy_timoxa"
+            
         )
         bot.edit_message_text(res, m.chat.id, wait_msg.message_id, parse_mode="Markdown")
     else:
