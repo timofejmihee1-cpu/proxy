@@ -11,7 +11,8 @@ from threading import Thread
 # --- [ КОНФИГ ] ---
 TOKEN = '8764406808:AAEwgPjf4K4CxJ8ZUfDy8G2XOCYCoP2a1HM'
 ADMIN_USERNAME = "PR1SM_777" 
-SUPPORT_BOT = "@Ovekin_777_bot" # Твой бот поддержки
+# Указываем ссылку напрямую, чтобы подчеркивания не пропадали
+SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 users = set()
@@ -48,7 +49,7 @@ def check_proxy(p_data):
 def start_cmd(m):
     users.add(m.chat.id)
     text = (
-        "🦾 **PROXY HUNTER v11.0**\n\n"
+        "🦾 **PROXY HUNTER v11.2**\n\n"
         "🛰 /get — Поиск быстрых прокси\n"
         "❓ /help — Помощь и поддержка"
     )
@@ -101,16 +102,16 @@ def help_cmd(m):
         "🔴 — Медленно\n\n"
         "🛑 **ПРОБЛЕМЫ?**\n"
         "Если прокси не подключается, попробуйте сменить тип интернета (Wi-Fi/4G) или выбрать другой вариант в списке.\n\n"
-        f"💡 **ЕСТЬ ИДЕЯ?**\n"
-        f"Мы всегда рады вашим предложениям по улучшению бота! Нашли баг или хотите предложить новую функцию? Пишите в нашу поддержку: {SUPPORT_BOT}"
+        "💡 **ЕСТЬ ИДЕЯ?**\n"
+        f"Мы всегда рады вашим предложениям! Пишите в нашу поддержку: [КЛИК СЮДА]({SUPPORT_LINK})"
     )
-    bot.send_message(m.chat.id, help_text)
+    bot.send_message(m.chat.id, help_text, disable_web_page_preview=True)
 
 # --- [ АДМИНКА ] ---
 @bot.message_handler(commands=['admin'])
 def admin_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
-        bot.send_message(m.chat.id, f"👑 **ADMIN**\nЮзеров: {len(users)}\nРассылка: `/send текст`")
+        bot.send_message(m.chat.id, f"👑 **ADMIN**\nЮзеров в сессии: {len(users)}\nРассылка: `/send текст`")
 
 @bot.message_handler(commands=['send'])
 def send_cmd(m):
