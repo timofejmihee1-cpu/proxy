@@ -19,7 +19,7 @@ WEB_URL = "https://proxy-rhe6.onrender.com"
 bot = telebot.TeleBot(TOKEN)
 users = set()
 
-# --- [ ЛОГИКА ПРОВЕРКИ ] ---
+# --- [ ЛОГИКА ПРОВЕРКИ ПРОКСИ ] ---
 def check_proxy(p_data):
     srv, prt, sec = p_data
     try:
@@ -27,75 +27,94 @@ def check_proxy(p_data):
         sock = socket.create_connection((srv, int(prt)), timeout=0.8)
         sock.close()
         ms = int((time.time() - start) * 1000)
-        icon = "🟢" if ms < 150 else "🟡" if ms < 300 else "🔴"
+        
+        if ms < 150: icon = "🟢"
+        elif ms < 300: icon = "🟡"
+        else: icon = "🔴"
+            
         return {'ms': ms, 'icon': icon, 'url': f"tg://proxy?server={srv}&port={prt}&secret={sec}", 'server': srv}
     except: return None
 
-def get_fresh_proxies(limit=10):
-    sources = ["https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"]
-    try:
-        r = requests.get(sources[0], timeout=5)
-        raw_list = re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', r.text)
-        unique = list(set(raw_list))
-        random.shuffle(unique)
-        with ThreadPoolExecutor(max_workers=25) as executor:
-            results = list(executor.map(check_proxy, unique[:50]))
-        return sorted([r for r in results if r], key=lambda x: x['ms'])[:limit]
-    except: return []
+def get_fresh_proxies(limit=8):
+    sources = [
+        "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt",
+        "https://raw.githubusercontent.com/hookzof/socks5_list/master/tgproxies.txt"
+    ]
+    raw_list = []
+    for url in sources:
+        try:
+            r = requests.get(url, timeout=5)
+            raw_list.extend(re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', r.text))
+        except: continue
+    
+    unique = list(set(raw_list))
+    random.shuffle(unique)
+    
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(check_proxy, unique[:60]))
+    
+    return sorted([r for r in results if r], key=lambda x: x['ms'])[:limit]
 
-# --- [ ВЕБ-САЙТ ] ---
+# --- [ ВЕБ-САЙТ С КАЗИНО (FLASK) ] ---
 app = Flask('')
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Proxy Hunter Casino</title>
+    <meta charset="UTF-8">
+    <title>Proxy Hunter Web + Casino</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background: #0f172a; color: #f8fafc; font-family: sans-serif; text-align: center; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; background: #1e293b; padding: 25px; border-radius: 20px; box-shadow: 0 15px 30px rgba(0,0,0,0.4); }
-        h1 { color: #38bdf8; }
-        .proxy-card { background: #334155; margin: 10px 0; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { background: #38bdf8; color: #0f172a; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; display: inline-block; }
+        body { background: #0f172a; color: #f8fafc; font-family: -apple-system, sans-serif; text-align: center; padding: 20px; margin: 0; }
+        .container { max-width: 500px; margin: 20px auto; background: #1e293b; padding: 25px; border-radius: 20px; box-shadow: 0 15px 30px rgba(0,0,0,0.4); border: 1px solid #334155; }
+        h1 { color: #38bdf8; font-size: 28px; }
+        .proxy-card { background: #334155; margin-bottom: 12px; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .btn { background: #38bdf8; color: #0f172a; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; }
         
-        .casino-box { margin-top: 30px; padding: 20px; border: 2px dashed #38bdf8; border-radius: 15px; background: #1e293b; }
+        .casino-box { margin-top: 30px; padding: 20px; border: 2px dashed #f59e0b; border-radius: 15px; background: #1e293b; }
         #wheel { width: 80px; height: 80px; border: 4px solid #f59e0b; border-radius: 50%; margin: 15px auto; display: flex; align-items: center; justify-content: center; font-size: 40px; transition: transform 0.5s; }
         .spinning { animation: spin 0.3s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         
         #result-link { display: none; margin-top: 15px; padding: 12px; background: #22c55e; border-radius: 8px; color: white; text-decoration: none; font-weight: bold; }
         .btn:disabled { background: #475569; cursor: not-allowed; }
+        .footer { margin-top: 30px; font-size: 13px; color: #64748b; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🛰 PROXY HUNTER</h1>
+        <p style="color:#94a3b8">Выбери прокси из списка или испытай удачу:</p>
+        
         <div id="proxy-list">
             {% for p in proxies %}
             <div class="proxy-card">
-                <div style="text-align:left"><b>{{ p.icon }} {{ p.ms }}ms</b><br><small style="color:#94a3b8">{{ p.server[:20] }}</small></div>
+                <div style="text-align:left">
+                    <span style="font-weight:bold">{{ p.icon }} {{ p.ms }}ms</span><br>
+                    <small style="color:#94a3b8">{{ p.server[:20] }}</small>
+                </div>
                 <a href="{{ p.url }}" class="btn">ВКЛЮЧИТЬ</a>
             </div>
             {% endfor %}
         </div>
 
         <div class="casino-box">
-            <h3>🎰 ПРОКСИ-КАЗИНО</h3>
+            <h3 style="color:#f59e0b; margin-top:0;">🎰 ПРОКСИ-КАЗИНО</h3>
             <div id="wheel">🎲</div>
-            <button onclick="spinWheel()" id="spin-button" class="btn" style="background: #f59e0b;">ИСПЫТАТЬ УДАЧУ</button>
-            <br>
-            <a href="#" id="result-link">ПОДКЛЮЧИТЬ ВЫПАВШИЙ</a>
+            <button onclick="spinWheel()" id="spin-button" class="btn" style="background: #f59e0b;">КРУТИТЬ КОЛЕСО</button>
+            <a href="#" id="result-link"></a>
         </div>
 
-        <p style="font-size:12px; color:#64748b; margin-top:20px;">Создано Тимофеем | <a href="{{ support }}" style="color:#38bdf8">Поддержка</a></p>
+        <div class="footer">
+            Создано Тимофеем | <a href="{{ support }}" style="color:#38bdf8; text-decoration:none;">Поддержка</a>
+        </div>
     </div>
 
     <script>
         const proxies = {{ proxies_json | safe }};
         function spinWheel() {
-            if (proxies.length === 0) { alert("Список пуст, обнови страницу!"); return; }
-            
+            if (proxies.length === 0) return alert("Обнови страницу!");
             const wheel = document.getElementById('wheel');
             const btn = document.getElementById('spin-button');
             const resLink = document.getElementById('result-link');
@@ -106,11 +125,11 @@ HTML_TEMPLATE = """
             
             setTimeout(() => {
                 wheel.classList.remove('spinning');
-                const randomProxy = proxies[Math.floor(Math.random() * proxies.length)];
-                wheel.innerHTML = randomProxy.icon;
-                resLink.href = randomProxy.url;
+                const p = proxies[Math.floor(Math.random() * proxies.length)];
+                wheel.innerHTML = p.icon;
+                resLink.href = p.url;
                 resLink.style.display = 'block';
-                resLink.innerHTML = "✅ ВЫПАЛ " + randomProxy.ms + "ms - ЖМИ!";
+                resLink.innerHTML = "✅ ВЫПАЛ " + p.ms + "ms - ЖМИ!";
                 btn.disabled = false;
             }, 2000);
         }
@@ -122,10 +141,7 @@ HTML_TEMPLATE = """
 @app.route('/')
 def home():
     proxies = get_fresh_proxies(8)
-    return render_template_string(HTML_TEMPLATE, 
-                               proxies=proxies, 
-                               proxies_json=json.dumps(proxies), 
-                               support=SUPPORT_LINK)
+    return render_template_string(HTML_TEMPLATE, proxies=proxies, proxies_json=json.dumps(proxies), support=SUPPORT_LINK)
 
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
@@ -135,7 +151,8 @@ def keep_alive():
 @bot.message_handler(commands=['start'])
 def start_cmd(m):
     users.add(m.chat.id)
-    bot.send_message(m.chat.id, "🦾 **PROXY HUNTER v14.1**\n\nКазино починено! Заходи на сайт и крути колесо.")
+    text = "🦾 **PROXY HUNTER v14.2**\n\n🛰 /get — Поиск прокси\n❓ /help — Важная информация"
+    bot.send_message(m.chat.id, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
@@ -145,8 +162,35 @@ def get_cmd(m):
     if valid:
         res = "📡 **АКТУАЛЬНЫЕ MTPROTO:**\n\n"
         for p in valid: res += f"{p['icon']} **{p['ms']}ms** — {p['url']}\n\n"
-        res += "🔗 Веб-версия с казино: " + WEB_URL
-        bot.edit_message_text(res, m.chat.id, wait_msg.message_id)
+        res += "⚠️ **ВНИМАНИЕ:**\nЕсли не грузит — смени Wi-Fi на 4G или наоборот. Пробуй разные варианты!"
+        bot.edit_message_text(res, m.chat.id, wait_msg.message_id, parse_mode="Markdown")
+    else:
+        bot.edit_message_text("❌ Прокси не найдены.", m.chat.id, wait_msg.message_id)
+
+@bot.message_handler(commands=['help'])
+def help_cmd(m):
+    help_text = (
+        "❓ **ИНФОРМАЦИЯ**\n\n"
+        "🟢 — Летает | 🟡 — Средне | 🔴 — Медленно\n\n"
+        "🛑 **ПРОБЛЕМЫ?**\n"
+        "Операторы часто блокируют порты. Если прокси «висит»:\n"
+        "— Попробуй другой прокси из списка\n"
+        "— Смени тип интернета\n"
+        "— Используй наш сайт с Казино: " + WEB_URL + "\n\n"
+        "💡 **ПОДДЕРЖКА:**\n[КЛИК СЮДА](" + SUPPORT_LINK + ")"
+    )
+    bot.send_message(m.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+
+@bot.message_handler(commands=['post'])
+def post_cmd(m):
+    if m.from_user.username == ADMIN_USERNAME:
+        bot.send_message(m.chat.id, "⏳ Генерирую пост...")
+        valid = get_fresh_proxies(5)
+        if valid:
+            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + КАЗИНО**\n\n"
+            for p in valid: post_text += f"{p['icon']} Пинг: **{p['ms']}ms**\n{p['url']}\n\n"
+            post_text += f"🌐 Наш сайт: {WEB_URL}\n📢 Подпишись на {CHANNEL_ID}"
+            bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
 
 @bot.message_handler(commands=['admin'])
 def admin_cmd(m):
