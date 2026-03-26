@@ -13,7 +13,7 @@ from telebot import types
 # --- [ КОНФИГ ] ---
 TOKEN = '8764406808:AAEwgPjf4K4CxJ8ZUfDy8G2XOCYCoP2a1HM'
 ADMIN_USERNAME = "PR1SM_777" 
-ADMIN_PASS = "TIMOXA_BOSS_777" 
+ADMIN_PASS = "TIMOXA_BOSS_777" # Пароль для входа в админку на сайте
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa"
 WEB_URL = "https://proxy-rhe6.onrender.com"
@@ -22,6 +22,7 @@ bot = telebot.TeleBot(TOKEN)
 users = set()
 logs = [] 
 
+# Функция для записи логов (кто что нажал)
 def add_log(action):
     t = time.strftime("%H:%M:%S")
     logs.append(f"[{t}] {action}")
@@ -94,7 +95,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>🛰 PROXY HUNTER</h1>
-        <p style="color:#94a3b8">Выбери прокси из списка или испытатай удачу:</p>
+        <p style="color:#94a3b8">Выбери прокси из списка или испытай удачу:</p>
         
         <div id="proxy-list">
             {% for p in proxies %}
@@ -132,7 +133,7 @@ HTML_TEMPLATE = """
             </div>
             <div id="adm-content" style="display:none;">
                 <p>Всего пользователей: <b>{{ user_count }}</b></p>
-                <h4 style="margin-bottom:5px;">ЛОГИ ДЕЙСТВИЙ:</h4>
+                <h4 style="margin-bottom:5px;">ЛОГИ ДЕЙСТВИЙ (ТГ):</h4>
                 <div class="log-box">{% for l in logs %}{{ l }}<br>{% endfor %}</div><br>
                 <button class="btn" style="background:#f59e0b" onclick="location.reload()">ОБНОВИТЬ ДАННЫЕ</button>
                 <button class="btn" onclick="document.getElementById('adminModal').style.display='none'">ЗАКРЫТЬ</button>
@@ -190,7 +191,7 @@ def start_cmd(m):
     markup.add(btn_web, btn_get, btn_help)
     
     text = (
-        "🦾 **PROXY HUNTER v16.1**\n\n"
+        "🦾 **PROXY HUNTER v16.2**\n\n"
         "Рады видеть тебя! Выбирай действие ниже:"
     )
     bot.send_message(m.chat.id, text, parse_mode="Markdown", reply_markup=markup)
@@ -205,7 +206,7 @@ def callback_inline(call):
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
     users.add(m.chat.id)
-    add_log(f"Запрос прокси от {m.chat.id}")
+    add_log(f"Запрос прокси от {m.from_user.username or m.chat.id}")
     wait_msg = bot.send_message(m.chat.id, "🛰 **Ищу лучшие варианты...**")
     valid = get_fresh_proxies(6)
     if valid:
@@ -222,7 +223,7 @@ def get_cmd(m):
 
 @bot.message_handler(commands=['help'])
 def help_cmd(m):
-    add_log(f"Юзер открыл помощь")
+    add_log(f"Юзер {m.from_user.username or m.chat.id} открыл помощь")
     help_text = (
         "❓ **ИНФОРМАЦИЯ**\n\n"
         "🟢 — Пинг отличный\n"
