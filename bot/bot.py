@@ -43,7 +43,7 @@ def get_fresh_proxies(limit=10):
         return sorted([r for r in results if r], key=lambda x: x['ms'])[:limit]
     except: return []
 
-# --- [ ВЕБ-САЙТ С КАЗИНО ] ---
+# --- [ ВЕБ-САЙТ ] ---
 app = Flask('')
 
 HTML_TEMPLATE = """
@@ -57,14 +57,15 @@ HTML_TEMPLATE = """
         .container { max-width: 500px; margin: 0 auto; background: #1e293b; padding: 25px; border-radius: 20px; box-shadow: 0 15px 30px rgba(0,0,0,0.4); }
         h1 { color: #38bdf8; }
         .proxy-card { background: #334155; margin: 10px 0; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { background: #38bdf8; color: #0f172a; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; }
+        .btn { background: #38bdf8; color: #0f172a; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; display: inline-block; }
         
-        /* Стили Казино */
         .casino-box { margin-top: 30px; padding: 20px; border: 2px dashed #38bdf8; border-radius: 15px; background: #1e293b; }
-        #wheel { width: 100px; height: 100px; border: 5px solid #38bdf8; border-radius: 50%; margin: 15px auto; transition: transform 3s cubic-bezier(0.1, 0.7, 1.0, 0.1); display: flex; align-items: center; justify-content: center; font-size: 30px; }
-        .spinning { animation: spin 0.5s linear infinite; }
+        #wheel { width: 80px; height: 80px; border: 4px solid #f59e0b; border-radius: 50%; margin: 15px auto; display: flex; align-items: center; justify-content: center; font-size: 40px; transition: transform 0.5s; }
+        .spinning { animation: spin 0.3s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        #result-link { display: none; margin-top: 15px; padding: 10px; background: #22c55e; border-radius: 8px; color: white; text-decoration: none; font-weight: bold; }
+        
+        #result-link { display: none; margin-top: 15px; padding: 12px; background: #22c55e; border-radius: 8px; color: white; text-decoration: none; font-weight: bold; }
+        .btn:disabled { background: #475569; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -81,9 +82,9 @@ HTML_TEMPLATE = """
 
         <div class="casino-box">
             <h3>🎰 ПРОКСИ-КАЗИНО</h3>
-            <p style="font-size: 12px; color: #94a3b8;">Не хочешь выбирать? Пусть решит удача!</p>
             <div id="wheel">🎲</div>
-            <button onclick="spinWheel()" id="spin-button" class="btn" style="background: #f59e0b;">КРУТИТЬ КОЛЕСО</button>
+            <button onclick="spinWheel()" id="spin-button" class="btn" style="background: #f59e0b;">ИСПЫТАТЬ УДАЧУ</button>
+            <br>
             <a href="#" id="result-link">ПОДКЛЮЧИТЬ ВЫПАВШИЙ</a>
         </div>
 
@@ -93,12 +94,13 @@ HTML_TEMPLATE = """
     <script>
         const proxies = {{ proxies_json | safe }};
         function spinWheel() {
-            if (proxies.length === 0) return alert("Сначала обнови страницу!");
+            if (proxies.length === 0) { alert("Список пуст, обнови страницу!"); return; }
+            
             const wheel = document.getElementById('wheel');
             const btn = document.getElementById('spin-button');
             const resLink = document.getElementById('result-link');
             
-            btn.disabled = True;
+            btn.disabled = true;
             resLink.style.display = 'none';
             wheel.classList.add('spinning');
             
@@ -108,9 +110,9 @@ HTML_TEMPLATE = """
                 wheel.innerHTML = randomProxy.icon;
                 resLink.href = randomProxy.url;
                 resLink.style.display = 'block';
-                resLink.innerHTML = "ВЫПАЛ " + randomProxy.ms + "ms - ПОДКЛЮЧИТЬ";
+                resLink.innerHTML = "✅ ВЫПАЛ " + randomProxy.ms + "ms - ЖМИ!";
                 btn.disabled = false;
-            }, 3000);
+            }, 2000);
         }
     </script>
 </body>
@@ -133,7 +135,7 @@ def keep_alive():
 @bot.message_handler(commands=['start'])
 def start_cmd(m):
     users.add(m.chat.id)
-    bot.send_message(m.chat.id, "🦾 **PROXY HUNTER v14.0**\n\nТеперь с Казино на сайте! Крути и выбирай лучший прокси.")
+    bot.send_message(m.chat.id, "🦾 **PROXY HUNTER v14.1**\n\nКазино починено! Заходи на сайт и крути колесо.")
 
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
@@ -143,28 +145,8 @@ def get_cmd(m):
     if valid:
         res = "📡 **АКТУАЛЬНЫЕ MTPROTO:**\n\n"
         for p in valid: res += f"{p['icon']} **{p['ms']}ms** — {p['url']}\n\n"
-        res += "⚠️ Не грузит? Пробуй другой или крути колесо на сайте: " + WEB_URL
+        res += "🔗 Веб-версия с казино: " + WEB_URL
         bot.edit_message_text(res, m.chat.id, wait_msg.message_id)
-
-@bot.message_handler(commands=['help'])
-def help_cmd(m):
-    help_text = (
-        "❓ **ИНФОРМАЦИЯ**\n\n"
-        "🟢 — Пинг отличный | 🟡 — Средний | 🔴 — Медленно\n\n"
-        "💡 **ЕСТЬ ИДЕЯ?**\n"
-        "Пишите в нашу поддержку: [КЛИК СЮДА](" + SUPPORT_LINK + ")"
-    )
-    bot.send_message(m.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
-
-@bot.message_handler(commands=['post'])
-def post_cmd(m):
-    if m.from_user.username == ADMIN_USERNAME:
-        valid = get_fresh_proxies(5)
-        if valid:
-            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + КАЗИНО**\n\n"
-            for p in valid: post_text += f"{p['icon']} Пинг: **{p['ms']}ms**\n{p['url']}\n\n"
-            post_text += f"🌐 Наш сайт: {WEB_URL}\n📢 Подпишись на {CHANNEL_ID}"
-            bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
 
 @bot.message_handler(commands=['admin'])
 def admin_cmd(m):
