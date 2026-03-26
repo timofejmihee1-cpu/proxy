@@ -11,6 +11,7 @@ from threading import Thread
 # --- [ КОНФИГ ] ---
 TOKEN = '8764406808:AAEwgPjf4K4CxJ8ZUfDy8G2XOCYCoP2a1HM'
 ADMIN_USERNAME = "PR1SM_777" 
+SUPPORT_BOT = "@Ovekin_777_bot" # Твой бот поддержки
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 users = set()
@@ -34,7 +35,12 @@ def check_proxy(p_data):
         sock = socket.create_connection((srv, int(prt)), timeout=1.0)
         sock.close()
         ms = int((time.time() - start) * 1000)
-        return {'ms': ms, 'url': f"tg://proxy?server={srv}&port={prt}&secret={sec}"}
+        
+        if ms < 150: icon = "🟢"
+        elif ms < 300: icon = "🟡"
+        else: icon = "🔴"
+            
+        return {'ms': ms, 'icon': icon, 'url': f"tg://proxy?server={srv}&port={prt}&secret={sec}"}
     except: return None
 
 # --- [ КОМАНДЫ ] ---
@@ -42,22 +48,20 @@ def check_proxy(p_data):
 def start_cmd(m):
     users.add(m.chat.id)
     text = (
-        "🦾 **PROXY HUNTER v9.0**\n\n"
-        "Доступные команды:\n"
-        "🛰 /get — Найти быстрые прокси\n"
-        "❓ /help — Как это работает"
+        "🦾 **PROXY HUNTER v11.0**\n\n"
+        "🛰 /get — Поиск быстрых прокси\n"
+        "❓ /help — Помощь и поддержка"
     )
     bot.send_message(m.chat.id, text)
 
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
     users.add(m.chat.id)
-    wait_msg = bot.send_message(m.chat.id, "🛰 **Сканирую источники...**")
+    wait_msg = bot.send_message(m.chat.id, "🛰 **Ищу лучшие варианты...**")
     
     sources = [
         "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt",
-        "https://raw.githubusercontent.com/hookzof/socks5_list/master/tgproxies.txt",
-        "https://raw.githubusercontent.com/Jetkai/proxy-list/main/online-proxies/txt/proxies-mtproto.txt"
+        "https://raw.githubusercontent.com/hookzof/socks5_list/master/tgproxies.txt"
     ]
     
     raw_list = []
@@ -70,52 +74,54 @@ def get_cmd(m):
     unique = list(set(raw_list))
     random.shuffle(unique)
     
-    # Сканируем первые 100 штук в 30 потоков
     with ThreadPoolExecutor(max_workers=30) as executor:
-        results = list(executor.map(check_proxy, unique[:100]))
+        results = list(executor.map(check_proxy, unique[:80]))
     
-    valid = sorted([r for r in results if r], key=lambda x: x['ms'])[:7]
+    valid = sorted([r for r in results if r], key=lambda x: x['ms'])[:6]
     
     if valid:
-        response = "✅ **Топ быстрых MTProto:**\n\n"
+        response = "📡 **АКТУАЛЬНЫЕ MTPROTO:**\n\n"
         for i, p in enumerate(valid):
-            response += f"{i+1}️⃣ **{p['ms']}ms**\n🔗 [ПОДКЛЮЧИТЬ]({p['url']})\n\n"
-        response += "Чтобы обновить список, нажми /get еще раз."
+            response += f"{p['icon']} **{p['ms']}ms** — [ПОДКЛЮЧИТЬ]({p['url']})\n"
+        
+        response += (
+            "\n⚠️ **ВНИМАНИЕ:**\n"
+            "Некоторые прокси могут не работать из-за ограничений оператора или Wi-Fi. Если не грузит — попробуйте следующий."
+        )
         bot.edit_message_text(response, m.chat.id, wait_msg.message_id, disable_web_page_preview=True)
     else:
-        bot.edit_message_text("❌ Живых прокси не найдено. Попробуй через минуту.", m.chat.id, wait_msg.message_id)
+        bot.edit_message_text("❌ Нет доступных прокси. Попробуй /get еще раз.", m.chat.id, wait_msg.message_id)
 
 @bot.message_handler(commands=['help'])
 def help_cmd(m):
-    bot.send_message(m.chat.id, "Всё просто: пишешь /get, выбираешь прокси с самым маленьким **ms** и жмешь на ссылку. Telegram предложит сохранить настройки.")
+    help_text = (
+        "❓ **ИНФОРМАЦИЯ**\n\n"
+        "🟢 — Пинг отличный\n"
+        "🟡 — Пинг средний\n"
+        "🔴 — Медленно\n\n"
+        "🛑 **ПРОБЛЕМЫ?**\n"
+        "Если прокси не подключается, попробуйте сменить тип интернета (Wi-Fi/4G) или выбрать другой вариант в списке.\n\n"
+        f"💡 **ЕСТЬ ИДЕЯ?**\n"
+        f"Мы всегда рады вашим предложениям по улучшению бота! Нашли баг или хотите предложить новую функцию? Пишите в нашу поддержку: {SUPPORT_BOT}"
+    )
+    bot.send_message(m.chat.id, help_text)
 
-# --- [ СКРЫТАЯ АДМИНКА ] ---
+# --- [ АДМИНКА ] ---
 @bot.message_handler(commands=['admin'])
 def admin_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
-        bot.send_message(m.chat.id, 
-            f"👑 **ADMIN PANEL**\n\n"
-            f"📊 Юзеров: {len(users)}\n"
-            f"📢 Рассылка: `/send Твой текст`"
-        )
+        bot.send_message(m.chat.id, f"👑 **ADMIN**\nЮзеров: {len(users)}\nРассылка: `/send текст`")
 
 @bot.message_handler(commands=['send'])
 def send_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
-        text_to_send = m.text.replace('/send', '').strip()
-        if not text_to_send:
-            bot.send_message(m.chat.id, "Ошибка: введи текст после команды.")
-            return
-        
-        count = 0
-        for u_id in users:
-            try:
-                bot.send_message(u_id, f"📢 **ОБЪЯВЛЕНИЕ:**\n\n{text_to_send}")
-                count += 1
-            except: continue
-        bot.send_message(m.chat.id, f"✅ Разослано {count} пользователям.")
+        text = m.text.replace('/send', '').strip()
+        if text:
+            for u_id in users:
+                try: bot.send_message(u_id, f"📢 **ОБЪЯВЛЕНИЕ:**\n\n{text}")
+                except: continue
+            bot.send_message(m.chat.id, "✅ Рассылка завершена.")
 
 if __name__ == "__main__":
     keep_alive()
-    print("🚀 Бот на командах запущен!")
     bot.polling(none_stop=True)
