@@ -182,7 +182,7 @@ def post_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
         valid = get_fresh_proxies(5)
         if valid:
-            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + КАЗИНО**\n\n"
+            post_text = "🛰 **СВЕЖИЕ ПРОКСИ**\n\n"
             for p in valid: post_text += f"{p['icon']} Пинг: **{p['ms']}ms**\n{p['url']}\n\n"
             post_text += f"🌐 Наш сайт: {WEB_URL}\n📢 Подпишись на {CHANNEL_ID}"
             bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
