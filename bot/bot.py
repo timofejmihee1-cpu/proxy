@@ -10,7 +10,7 @@ from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
-TOKEN = '8764406808:AAF2jaeyaLtCYbufyxcNQ8u-jnGc33NrQOc'
+TOKEN = '8764406808:AAEwgPjf4K4CxJ8ZUfDy8G2XOCYCoP2a1HM'
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa"
@@ -51,7 +51,6 @@ def get_fresh_proxies(limit=8):
 # --- [ ВЕБ-САЙТ ] ---
 app = Flask('')
 
-# ТОТ САМЫЙ ПИНГ, КОТОРЫЙ ТЫ ПРОСИЛ
 @app.route('/ping')
 def ping():
     return "OK", 200
@@ -59,13 +58,12 @@ def ping():
 @app.route('/')
 def home():
     proxies = get_fresh_proxies(8)
-    # Твой полный HTML со всеми строчками и оформлением
     HTML_TEMPLATE = """
     <!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <title>Proxy Hunter Web + Casino</title>
+        <title>Proxy Hunter Web</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body { background: #0f172a; color: #f8fafc; font-family: -apple-system, sans-serif; text-align: center; padding: 20px; margin: 0; }
@@ -126,6 +124,17 @@ def start_cmd(m):
     users.add(m.chat.id)
     bot.send_message(m.chat.id, "🦾 **PROXY HUNTER v14.3**\n\n/get — Прокси\n/help — Помощь")
 
+@bot.message_handler(commands=['help'])
+def help_cmd(m):
+    help_text = (
+        "🛰 **ИНФОРМАЦИЯ И ПОМОЩЬ**\n\n"
+        "🌐 **У нас есть сайт:** [Открыть PROXY WEB](" + WEB_URL + ")\n"
+        "🛰 `/get` — Список быстрых прокси прямо тут\n\n"
+        "🛠 **Поддержка:** @Ovekin_777_bot\n"
+        "👑 **Админ:** @" + ADMIN_USERNAME
+    )
+    bot.send_message(m.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
     wait_msg = bot.send_message(m.chat.id, "🛰 **Ищу лучшие варианты...**")
@@ -140,8 +149,9 @@ def post_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
         valid = get_fresh_proxies(5)
         if valid:
-            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + КАЗИНО**\n\n"
+            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + WEB**\n\n"
             for p in valid: post_text += f"{p['icon']} Пинг: **{p['ms']}ms**\n{p['url']}\n\n"
+            post_text += f"🌐 Больше на сайте: {WEB_URL}"
             bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
 
 @bot.message_handler(commands=['admin'])
