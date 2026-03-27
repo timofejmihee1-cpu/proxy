@@ -5,12 +5,15 @@ import time
 import random
 import socket
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
-TOKEN = '8764406808:AAFPVrLADOPhMuOXhJ5XQJri9w6GD6zmTkI'
+# Брат, теперь токен в безопасности в настройках Render
+TOKEN = os.getenv("BOT_TOKEN") 
+
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa"
@@ -51,6 +54,7 @@ def get_fresh_proxies(limit=8):
 # --- [ ВЕБ-САЙТ ] ---
 app = Flask('')
 
+# ТОТ САМЫЙ ПИНГ, КОТОРЫЙ ТЫ ПРОСИЛ
 @app.route('/ping')
 def ping():
     return "OK", 200
@@ -58,12 +62,13 @@ def ping():
 @app.route('/')
 def home():
     proxies = get_fresh_proxies(8)
+    # Твой полный HTML со всеми строчками и оформлением
     HTML_TEMPLATE = """
     <!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <title>Proxy Hunter Web</title>
+        <title>Proxy Hunter Web + Casino</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body { background: #0f172a; color: #f8fafc; font-family: -apple-system, sans-serif; text-align: center; padding: 20px; margin: 0; }
@@ -114,51 +119,64 @@ def home():
     """
     return render_template_string(HTML_TEMPLATE, proxies=proxies, px_json=json.dumps(proxies))
 
-def run(): app.run(host='0.0.0.0', port=8080)
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
 def keep_alive():
-    t = Thread(target=run); t.daemon = True; t.start()
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
 
 # --- [ КОМАНДЫ БОТА ] ---
 @bot.message_handler(commands=['start'])
 def start_cmd(m):
     users.add(m.chat.id)
-    bot.send_message(m.chat.id, "🦾 **PROXY HUNTER v14.3**\n\n/get — Прокси\n/help — Помощь")
+    bot.send_message(m.chat.id, "🦾 PROXY HUNTER v14.3\n\n/get — Прокси\n/help — Помощь")
 
 @bot.message_handler(commands=['help'])
 def help_cmd(m):
+    # Убрал parse_mode, чтобы не было ошибки 400 Bad Request
     help_text = (
-        "🛰 **ИНФОРМАЦИЯ И ПОМОЩЬ**\n\n"
-        "🌐 **У нас есть сайт:** [Открыть PROXY WEB](" + WEB_URL + ")\n"
-        "🛰 `/get` — Список быстрых прокси прямо тут\n\n"
-        "🛠 **Поддержка:** @Ovekin_777_bot\n"
-        "👑 **Админ:** @" + ADMIN_USERNAME
+        "🛰 ИНФОРМАЦИЯ И ПОМОЩЬ\n\n"
+        f"🌐 Наш сайт: {WEB_URL}\n"
+        "🛰 /get — Список быстрых прокси\n\n"
+        "🛠 Поддержка: @Ovekin_777_bot\n"
+        f"👑 Админ: @{ADMIN_USERNAME}"
     )
-    bot.send_message(m.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(m.chat.id, help_text, disable_web_page_preview=True)
 
 @bot.message_handler(commands=['get'])
 def get_cmd(m):
-    wait_msg = bot.send_message(m.chat.id, "🛰 **Ищу лучшие варианты...**")
+    wait_msg = bot.send_message(m.chat.id, "🛰 Ищу лучшие варианты...")
     valid = get_fresh_proxies(6)
     if valid:
-        res = "📡 **АКТУАЛЬНЫЕ MTPROTO:**\n\n"
-        for p in valid: res += f"{p['icon']} **{p['ms']}ms** — {p['url']}\n\n"
-        bot.edit_message_text(res, m.chat.id, wait_msg.message_id, parse_mode="Markdown")
+        res = "📡 АКТУАЛЬНЫЕ MTPROTO:\n\n"
+        for p in valid:
+            res += f"{p['icon']} {p['ms']}ms — {p['url']}\n\n"
+        bot.edit_message_text(res, m.chat.id, wait_msg.message_id)
+    else:
+        bot.edit_message_text("❌ Прокси не найдены, попробуйте позже.", m.chat.id, wait_msg.message_id)
 
 @bot.message_handler(commands=['post'])
 def post_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
         valid = get_fresh_proxies(5)
         if valid:
-            post_text = "🛰 **СВЕЖИЕ ПРОКСИ + WEB**\n\n"
-            for p in valid: post_text += f"{p['icon']} Пинг: **{p['ms']}ms**\n{p['url']}\n\n"
+            post_text = "🛰 СВЕЖИЕ ПРОКСИ + WEB\n\n"
+            for p in valid:
+                post_text += f"{p['icon']} Пинг: {p['ms']}ms\n{p['url']}\n\n"
             post_text += f"🌐 Больше на сайте: {WEB_URL}"
             bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
 
 @bot.message_handler(commands=['admin'])
 def admin_cmd(m):
     if m.from_user.username == ADMIN_USERNAME:
-        bot.send_message(m.chat.id, f"👑 **ADMIN**\nЮзеров: {len(users)}\n/post — Рассылка")
+        bot.send_message(m.chat.id, f"👑 ADMIN\nЮзеров: {len(users)}\n/post — Рассылка")
 
 if __name__ == "__main__":
-    keep_alive()
-    bot.polling(none_stop=True)
+    if not TOKEN:
+        print("Ошибка: TOKEN не найден в Environment Variables!")
+    else:
+        keep_alive()
+        print("Бот успешно запущен...")
+        bot.polling(none_stop=True)
