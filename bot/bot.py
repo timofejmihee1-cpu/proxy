@@ -10,7 +10,7 @@ from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
-TOKEN = '8764406808:AAEwgPjf4K4CxJ8ZUfDy8G2XOCYCoP2a1HM'
+TOKEN = '8764406808:AAFPVrLADOPhMuOXhJ5XQJri9w6GD6zmTkI'
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa"
