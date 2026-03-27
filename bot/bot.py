@@ -142,6 +142,7 @@ def help_cmd(m):
         "🛰 /get — Список быстрых прокси\n\n"
         "🛠 Поддержка: @Ovekin_777_bot\n"
         f"👑 Админ: @{ADMIN_USERNAME}"
+        "🛠 НАШ ТГ КАНАЛ: https://t.me/proxy_timoxa\n"
     )
     bot.send_message(m.chat.id, help_text, disable_web_page_preview=True)
 
