@@ -11,16 +11,16 @@ from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
-# Твой токен, который ты просил оставить прямо здесь
 TOKEN = '8764406808:AAFPVrLADOPhMuOXhJ5XQJri9w6GD6zmTkI'
 
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa" 
+LOG_CHANNEL_ID = "@logi_proxy" # Твой канал для логов
 CHANNEL_URL = "https://t.me/proxy_timoxa"
 WEB_URL = "https://proxy-rhe6.onrender.com"
 
-# ОПТИМИЗАЦИЯ: Включил многопоточность, чтобы 500+ юзеров не вешали бота
+# Включена многопоточность для работы с 500+ юзерами
 bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=20)
 users = set()
 
@@ -33,12 +33,24 @@ def is_subscribed(user_id):
         print(f"Ошибка проверки подписки: {e}")
         return True 
 
+# --- [ ЛОГИКА ЛОГИРОВАНИЯ ] ---
+def send_log(message):
+    try:
+        user = message.from_user
+        log_text = (
+            f"👤 Юзер: {user.first_name} (@{user.username})\n"
+            f"🆔 ID: {user.id}\n"
+            f"💬 Написал: {message.text if message.text else '[Вложение/Кнопка]'}"
+        )
+        bot.send_message(LOG_CHANNEL_ID, log_text)
+    except Exception as e:
+        print(f"Ошибка логирования: {e}")
+
 # --- [ ОПТИМИЗИРОВАННАЯ ЛОГИКА ПРОКСИ ] ---
 def check_proxy(p_data):
     srv, prt, sec = p_data
     try:
         start = time.time()
-        # ОПТИМИЗАЦИЯ: Таймаут 0.7 сек, чтобы быстрее отсеивать мертвые прокси
         sock = socket.create_connection((srv, int(prt)), timeout=0.7)
         sock.close()
         ms = int((time.time() - start) * 1000)
@@ -57,10 +69,8 @@ def get_fresh_proxies(limit=8):
         raw_list = re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', r.text)
         unique = list(set(raw_list))
         random.shuffle(unique)
-        # ОПТИМИЗАЦИЯ: Увеличил до 50 рабочих потоков для чекера
         with ThreadPoolExecutor(max_workers=50) as executor:
             results = list(executor.map(check_proxy, unique[:100]))
-        
         valid = sorted([r for r in results if r], key=lambda x: x['ms'])
         return valid[:limit]
     except: return []
@@ -134,66 +144,67 @@ def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run); t.daemon = True; t.start()
 
-# --- [ ОБРАБОТЧИК КОМАНД С ПРОВЕРКОЙ ] ---
+# --- [ ЕДИНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ СООБЩЕНИЙ ] ---
 
-@bot.message_handler(commands=['start', 'get', 'help', 'admin'])
-def handle_commands(m):
-    # Обязательная проверка подписки
-    if not is_subscribed(m.from_user.id):
-        markup = telebot.types.InlineKeyboardMarkup()
-        btn = telebot.types.InlineKeyboardButton("Подписаться на канал", url=CHANNEL_URL)
-        markup.add(btn)
-        
-        bot.send_message(
-            m.chat.id, 
-            "⚠️ **Доступ ограничен!**\n\nПодпишитесь на канал, чтобы поддержать автора бота и продолжить использование.\n\nПосле подписки снова введите команду.", 
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
+@bot.message_handler(func=lambda message: True)
+def handle_all(m):
+    # Логируем всё в канал @logi_proxy
+    send_log(m)
+
+    # Проверка на наличие текста (команды)
+    if not m.text:
         return
 
-    cmd = m.text.split()[0].lower()
-    
-    if cmd == '/start':
-        users.add(m.chat.id)
-        bot.send_message(m.chat.id, "🦾 PROXY HUNTER v14.3\n\n/get — Прокси\n/help — Помощь")
-    
-    elif cmd == '/help':
-        help_text = (
-            "🛰 ИНФОРМАЦИЯ И ПОМОЩЬ\n\n"
-            f"🌐 Наш сайт: {WEB_URL}\n"
-            "🛰 /get — Список быстрых прокси\n\n"
-            "🛠 Поддержка: @Ovekin_777_bot\n"
-            f"👑 Админ: @{ADMIN_USERNAME}"
-        )
-        bot.send_message(m.chat.id, help_text, disable_web_page_preview=True)
-    
-    elif cmd == '/get':
-        wait_msg = bot.send_message(m.chat.id, "🛰 Ищу лучшие варианты...")
-        valid = get_fresh_proxies(6)
-        if valid:
-            res = "📡 АКТУАЛЬНЫЕ MTPROTO:\n\n"
-            for p in valid: res += f"{p['icon']} {p['ms']}ms — {p['url']}\n\n"
-            bot.edit_message_text(res, m.chat.id, wait_msg.message_id)
-        else:
-            bot.edit_message_text("❌ Ошибка поиска прокси.", m.chat.id, wait_msg.message_id)
+    # Если это команда
+    if m.text.startswith('/'):
+        # Проверка обязательной подписки
+        if not is_subscribed(m.from_user.id):
+            markup = telebot.types.InlineKeyboardMarkup()
+            btn = telebot.types.InlineKeyboardButton("Подписаться на канал", url=CHANNEL_URL)
+            markup.add(btn)
+            bot.send_message(m.chat.id, "⚠️ **Доступ ограничен!**\n\nПодпишитесь на канал, чтобы поддержать автора бота и продолжить использование.\n\nПосле подписки снова введите команду.", reply_markup=markup, parse_mode="Markdown")
+            return
 
-    elif cmd == '/admin':
-        if m.from_user.username == ADMIN_USERNAME:
-            bot.send_message(m.chat.id, f"👑 ADMIN\nЮзеров: {len(users)}\n/post — Рассылка")
+        cmd = m.text.split()[0].lower()
+        
+        if cmd == '/start':
+            users.add(m.chat.id)
+            bot.send_message(m.chat.id, "🦾 PROXY HUNTER v14.3\n\n/get — Получить прокси\n/help — Помощь")
+        
+        elif cmd == '/help':
+            help_text = (
+                "🛰 ИНФОРМАЦИЯ И ПОМОЩЬ\n\n"
+                f"🌐 Наш сайт: {WEB_URL}\n"
+                "🛰 /get — Список быстрых прокси\n\n"
+                "🛠 Поддержка: @Ovekin_777_bot\n"
+                f"👑 Админ: @{ADMIN_USERNAME}"
+            )
+            bot.send_message(m.chat.id, help_text, disable_web_page_preview=True)
+        
+        elif cmd == '/get':
+            wait_msg = bot.send_message(m.chat.id, "🛰 Ищу лучшие варианты...")
+            valid = get_fresh_proxies(6)
+            if valid:
+                res = "📡 АКТУАЛЬНЫЕ MTPROTO:\n\n"
+                for p in valid: res += f"{p['icon']} {p['ms']}ms — {p['url']}\n\n"
+                bot.edit_message_text(res, m.chat.id, wait_msg.message_id)
+            else:
+                bot.edit_message_text("❌ Ошибка поиска прокси.", m.chat.id, wait_msg.message_id)
 
-@bot.message_handler(commands=['post'])
-def post_cmd(m):
-    if m.from_user.username == ADMIN_USERNAME:
-        valid = get_fresh_proxies(5)
-        if valid:
-            post_text = "🛰 СВЕЖИЕ ПРОКСИ + WEB\n\n"
-            for p in valid: post_text += f"{p['icon']} Пинг: {p['ms']}ms\n{p['url']}\n\n"
-            post_text += f"🌐 Больше на сайте: {WEB_URL}"
-            bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
+        elif cmd == '/admin':
+            if m.from_user.username == ADMIN_USERNAME:
+                bot.send_message(m.chat.id, f"👑 ADMIN\nЮзеров: {len(users)}\n/post — Рассылка")
+
+        elif cmd == '/post':
+            if m.from_user.username == ADMIN_USERNAME:
+                valid = get_fresh_proxies(5)
+                if valid:
+                    post_text = "🛰 СВЕЖИЕ ПРОКСИ + WEB\n\n"
+                    for p in valid: post_text += f"{p['icon']} Пинг: {p['ms']}ms\n{p['url']}\n\n"
+                    post_text += f"🌐 Больше на сайте: {WEB_URL}"
+                    bot.send_message(CHANNEL_ID, post_text, disable_web_page_preview=True)
 
 if __name__ == "__main__":
     keep_alive()
-    print("Бот оптимизирован и запущен...")
-    # ОПТИМИЗАЦИЯ: skip_pending=True игнорирует сообщения, которые прислали, пока бот был оффлайн
-    bot.polling(none_stop=True)
+    print("Бот полностью оптимизирован и логирование активно...")
+    bot.polling(none_stop=True, skip_pending=True)
