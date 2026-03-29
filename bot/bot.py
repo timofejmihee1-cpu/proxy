@@ -19,8 +19,8 @@ from threading import Thread, Lock
 # [ РАЗДЕЛ 1: КОНФИГУРАЦИЯ ]
 # ---------------------------------------------------------
 
-# ВНИМАНИЕ: Смени токен в @BotFather, этот засвечен!
-TOKEN = '8764406808:AAGksp-skBypDJemRA9gESpXECwUVXPbesU'
+
+TOKEN = '8764406808:AAElEYSNmg_7tVhhl4a5QZ7UTQriXJA3Fbc'
 
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_TAG = "@Ovekin_777_bot" 
