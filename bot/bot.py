@@ -11,7 +11,7 @@ from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
-TOKEN = '8764406808:AAElEYSNmg_7tVhhl4a5QZ7UTQriXJA3Fbc'
+TOKEN = '8764406808:AAG7jEHug82Gw8MPxIDQZ0EDY4EwbzXpVVA'
 
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
