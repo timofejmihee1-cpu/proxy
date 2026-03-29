@@ -110,11 +110,7 @@ def home():
                 <a href="{{ p.url }}" class="btn">ВКЛЮЧИТЬ</a>
             </div>
             {% endfor %}
-            <div class="casino">
-                <h3 style="color:#f59e0b;">🎰 ПРОКСИ-КАЗИНО</h3>
-                <p>Нажми обновить, чтобы испытать удачу!</p>
-                <button onclick="location.reload()" class="btn" style="background:#f59e0b;">КРУТИТЬ</button>
-            </div>
+            
         </div>
     </body>
     </html>
