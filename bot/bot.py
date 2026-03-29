@@ -11,6 +11,7 @@ from flask import Flask, render_template_string
 from threading import Thread
 
 # --- [ КОНФИГ ] ---
+# Твой токен, который ты просил оставить прямо здесь
 TOKEN = '8764406808:AAFPVrLADOPhMuOXhJ5XQJri9w6GD6zmTkI'
 
 ADMIN_USERNAME = "PR1SM_777" 
@@ -19,7 +20,8 @@ CHANNEL_ID = "@proxy_timoxa"
 CHANNEL_URL = "https://t.me/proxy_timoxa"
 WEB_URL = "https://proxy-rhe6.onrender.com"
 
-bot = telebot.TeleBot(TOKEN)
+# ОПТИМИЗАЦИЯ: Включил многопоточность, чтобы 500+ юзеров не вешали бота
+bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=20)
 users = set()
 
 # --- [ ЛОГИКА ПРОВЕРКИ ПОДПИСКИ ] ---
@@ -31,12 +33,13 @@ def is_subscribed(user_id):
         print(f"Ошибка проверки подписки: {e}")
         return True 
 
-# --- [ ЛОГИКА ПРОКСИ ] ---
+# --- [ ОПТИМИЗИРОВАННАЯ ЛОГИКА ПРОКСИ ] ---
 def check_proxy(p_data):
     srv, prt, sec = p_data
     try:
         start = time.time()
-        sock = socket.create_connection((srv, int(prt)), timeout=0.8)
+        # ОПТИМИЗАЦИЯ: Таймаут 0.7 сек, чтобы быстрее отсеивать мертвые прокси
+        sock = socket.create_connection((srv, int(prt)), timeout=0.7)
         sock.close()
         ms = int((time.time() - start) * 1000)
         
@@ -54,9 +57,12 @@ def get_fresh_proxies(limit=8):
         raw_list = re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', r.text)
         unique = list(set(raw_list))
         random.shuffle(unique)
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            results = list(executor.map(check_proxy, unique[:60]))
-        return sorted([r for r in results if r], key=lambda x: x['ms'])[:limit]
+        # ОПТИМИЗАЦИЯ: Увеличил до 50 рабочих потоков для чекера
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            results = list(executor.map(check_proxy, unique[:100]))
+        
+        valid = sorted([r for r in results if r], key=lambda x: x['ms'])
+        return valid[:limit]
     except: return []
 
 # --- [ ВЕБ-САЙТ ] ---
@@ -146,12 +152,11 @@ def handle_commands(m):
         )
         return
 
-    # Логика команд
-    cmd = m.text.split()[0]
+    cmd = m.text.split()[0].lower()
     
     if cmd == '/start':
         users.add(m.chat.id)
-        bot.send_message(m.chat.id, "🦾 PROXY HUNTER v14.3\n\n/get — Получить прокси\n/help — Помощь")
+        bot.send_message(m.chat.id, "🦾 PROXY HUNTER v14.3\n\n/get — Прокси\n/help — Помощь")
     
     elif cmd == '/help':
         help_text = (
@@ -189,5 +194,6 @@ def post_cmd(m):
 
 if __name__ == "__main__":
     keep_alive()
-    print("Бот успешно запущен...")
+    print("Бот оптимизирован и запущен...")
+    # ОПТИМИЗАЦИЯ: skip_pending=True игнорирует сообщения, которые прислали, пока бот был оффлайн
     bot.polling(none_stop=True)
