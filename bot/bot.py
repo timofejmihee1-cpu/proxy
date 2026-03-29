@@ -1,3 +1,8 @@
+# =================================================================
+# ПРOЕКТ: PROXY HUNTER v14.3 - MAXIMUM EDITION
+# ОСОБЕННОСТИ: Оптимизация под РФ, Многопоточность, Веб-интерфейс
+# =================================================================
+
 import telebot
 import requests
 import re
@@ -6,375 +11,429 @@ import random
 import socket
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+import sys
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template_string
 from threading import Thread
 
-# =========================================================
-# [ БЛОК 1: ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ И НАСТРОЙКИ ]
-# =========================================================
-# Основные ключи доступа
-TOKEN = '8764406808:AAESVgV_PKemfwMaN5bdwiH3rgtXeYyMYOs'
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 1: ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И НАСТРОЙКИ ]
+# ---------------------------------------------------------
 
-# Данные администратора и контакты
-ADMIN_USERNAME = "PR1SM_777" 
-SUPPORT_LINK = "https://t.me/Ovekin_777_bot" 
+# Токен бота (Telegram Bot API)
+BOT_TOKEN = '8764406808:AAESVgV_PKemfwMaN5bdwiH3rgtXeYyMYOs'
 
-# Настройки каналов (ID и Ссылки)
-CHANNEL_ID = "@proxy_timoxa" 
-LOG_CHANNEL_ID = "@logi_proxy" 
-CHANNEL_URL = "https://t.me/proxy_timoxa"
+# Данные администратора
+ADMIN_NICKNAME = "PR1SM_777" 
+SUPPORT_USER = "@Ovekin_777_bot" 
 
-# Ссылка на веб-интерфейс (Render)
-WEB_URL = "https://proxy-rhe6.onrender.com"
+# Идентификаторы каналов
+PRIMARY_CHANNEL = "@proxy_timoxa"      # Канал для постов
+LOG_COLLECTOR_CHANNEL = "@logi_proxy" # Канал для логов
+SUBSCRIPTION_LINK = "https://t.me/proxy_timoxa"
 
-# Инициализация бота с поддержкой 40 одновременных потоков
-# Это нужно, чтобы бот не тормозил при большом наплыве юзеров
-bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=40)
+# Ссылка на веб-хостинг Render
+PROJECT_WEB_LINK = "https://proxy-rhe6.onrender.com"
 
-# =========================================================
-# [ БЛОК 2: ПРОВЕРКА ПОДПИСКИ (ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ) ]
-# =========================================================
-def is_subscribed(user_id):
+# Настройка логирования в консоль для отладки на Render
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Инициализация объекта бота с поддержкой высокого количества потоков
+# threaded=True позволяет обрабатывать запросы от сотен юзеров одновременно
+bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=50)
+
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 2: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ПРОВЕРКИ ]
+# ---------------------------------------------------------
+
+def check_user_subscription(user_id_to_check):
     """
-    Проверяет статус пользователя в канале.
-    Если бот не админ в канале, проверка всегда будет давать True.
+    Функция для проверки наличия пользователя в основном канале.
+    Возвращает True, если пользователь подписан, и False в противном случае.
     """
     try:
-        chat_member = bot.get_chat_member(CHANNEL_ID, user_id)
-        if chat_member.status in ['member', 'administrator', 'creator']:
+        # Запрос к API Telegram для получения статуса участника
+        member_info = bot.get_chat_member(PRIMARY_CHANNEL, user_id_to_check)
+        
+        # Список статусов, которые считаются "подписанными"
+        valid_statuses = ['member', 'administrator', 'creator']
+        
+        if member_info.status in valid_statuses:
             return True
         else:
             return False
-    except Exception as e:
-        # В случае ошибки API (например, канал не найден), пускаем пользователя
-        print(f"Ошибка системы подписки: {e}")
+            
+    except Exception as subscription_error:
+        # В случае ошибки (например, если бот не админ в канале), пускаем юзера
+        logger.error(f"Критическая ошибка проверки подписки: {subscription_error}")
         return True 
 
-# =========================================================
-# [ БЛОК 3: СИСТЕМА ДЕТАЛЬНОГО ЛОГИРОВАНИЯ ]
-# =========================================================
-def send_log(message):
+def send_detailed_log(message_object):
     """
-    Отправляет полный отчет о действиях пользователя в @logi_proxy
+    Формирует и отправляет расширенный лог действий пользователя в канал логов.
+    Включает имя, юзернейм, ID и текст сообщения.
     """
     try:
-        user = message.from_user
-        first_name = user.first_name if user.first_name else "Без имени"
-        username = f"@{user.username}" if user.username else "Нет юзернейма"
-        user_id = user.id
-        content = message.text if message.text else "[Медиа-контент]"
+        user_data = message_object.from_user
         
-        log_report = "🚀 **ОТЧЕТ О ДЕЙСТВИИ ЮЗЕРА**\n"
-        log_report += "--------------------------------------\n"
-        log_report += f"👤 Имя: **{first_name}**\n"
-        log_report += f"🔗 Юзер: {username}\n"
-        log_report += f"🆔 ID: `{user_id}`\n"
-        log_report += f"💬 Сообщение: {content}\n"
-        log_report += "--------------------------------------"
+        # Сбор данных о пользователе
+        name_of_user = user_data.first_name if user_data.first_name else "Имя скрыто"
+        tag_of_user = f"@{user_data.username}" if user_data.username else "Юзернейм отсутствует"
+        unique_id = user_data.id
+        raw_text = message_object.text if message_object.text else "[Медиа-файл или кнопка]"
         
-        bot.send_message(LOG_CHANNEL_ID, log_report, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Критическая ошибка логирования: {e}")
+        # Формирование текста лога
+        log_payload = "📋 **ОТЧЕТ О СОБЫТИИ**\n"
+        log_payload += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        log_payload += f"👤 **Пользователь:** {name_of_user}\n"
+        log_payload += f"🔗 **Тег:** {tag_of_user}\n"
+        log_payload += f"🆔 **ID:** `{unique_id}`\n"
+        log_payload += f"💬 **Сообщение:** {raw_text}\n"
+        log_payload += "━━━━━━━━━━━━━━━━━━━━━━"
+        
+        bot.send_message(LOG_COLLECTOR_CHANNEL, log_payload, parse_mode="Markdown")
+        
+    except Exception as log_dispatch_error:
+        logger.error(f"Ошибка при отправке лога в канал: {log_dispatch_error}")
 
-# =========================================================
-# [ БЛОК 4: ИНТЕЛЛЕКТУАЛЬНЫЙ ЧЕКЕР ПРОКСИ ДЛЯ РФ ]
-# =========================================================
-def check_proxy_performance(proxy_data):
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 3: ЯДРО СИСТЕМЫ ПРОВЕРКИ ПРОКСИ ]
+# ---------------------------------------------------------
+
+def validate_proxy_node(proxy_tuple, use_strict_filter=True):
     """
-    Проверяет прокси на доступность и фильтрует фейки для России.
+    Проверяет работоспособность прокси через создание прямого сокета.
+    Использует адаптивные фильтры для обхода ограничений в России.
     """
-    server, port, secret = proxy_data
+    target_server, target_port, target_secret = proxy_tuple
+    
     try:
-        start_timestamp = time.time()
+        # Засекаем время начала проверки для расчета пинга
+        start_check_time = time.time()
         
-        # Создаем сетевое соединение (TCP Socket)
-        checker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        checker_socket.settimeout(1.0) # Увеличили таймаут для точности
+        # Инициализация TCP сокета
+        test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
-        # Проверка порта
-        connection_code = checker_socket.connect_ex((server, int(port)))
-        checker_socket.close()
+        # Установка таймаута (чуть больше для стабильного обнаружения в РФ)
+        test_socket.settimeout(1.3)
         
-        if connection_code == 0:
-            end_timestamp = time.time()
-            # Вычисляем задержку в миллисекундах
-            latency_ms = int((end_timestamp - start_timestamp) * 1000)
+        # Попытка подключения к порту
+        connection_status = test_socket.connect_ex((target_server, int(target_port)))
+        test_socket.close()
+        
+        # Если порт открыт (код 0)
+        if connection_status == 0:
+            end_check_time = time.time()
+            final_latency = int((end_check_time - start_check_time) * 1000)
             
-            # --- [ ЖЕСТКАЯ ФИЛЬТРАЦИЯ ДЛЯ РФ ] ---
-            # 1. Отсекаем фейковые прокси с пингом ниже 120мс
-            if latency_ms < 120:
-                return None
-            
-            # 2. Отсекаем слишком лагающие (выше 800мс)
-            if latency_ms > 800:
-                return None
-            
-            # 3. Проверка на маскировку TLS (секреты ee... или dd...)
-            # Эти прокси работают в России намного лучше остальных
-            is_secure = secret.startswith(('ee', 'dd'))
-            
-            # Если секрет обычный, но пинг подозрительно низкий - скипаем
-            if not is_secure and latency_ms < 200:
-                return None
-
-            # Присвоение статуса и иконки
-            if latency_ms < 300:
-                status_emoji = "🟢"
-            elif latency_ms < 500:
-                status_emoji = "🟡"
-            else:
-                status_emoji = "🔴"
+            # --- ПРИМЕНЕНИЕ ФИЛЬТРОВ ДЛЯ РФ ---
+            if use_strict_filter:
+                # 1. Защита от фейковых быстрых прокси (заглушек)
+                if final_latency < 115:
+                    return None
                 
-            tg_proxy_url = f"tg://proxy?server={server}&port={port}&secret={secret}"
-            
+                # 2. Ограничение по верхнему порогу для комфортной работы
+                if final_latency > 850:
+                    return None
+                
+                # 3. Проверка на поддержку TLS маскировки (dd/ee секреты)
+                # Это критически важно для обхода Deep Packet Inspection (DPI)
+                is_secure_secret = target_secret.startswith(('ee', 'dd'))
+                
+                if not is_secure_secret and final_latency < 200:
+                    # Обычные секреты с очень низким пингом часто блокируются в РФ
+                    return None
+            else:
+                # Мягкий режим: если в строгом режиме ничего не нашлось
+                if final_latency < 60 or final_latency > 1500:
+                    return None
+
+            # Вычисление иконки качества (Emoji Indicator)
+            if final_latency < 350:
+                quality_emoji = "🟢"
+            elif final_latency < 550:
+                quality_emoji = "🟡"
+            else:
+                quality_emoji = "🔴"
+                
+            # Сборка финального словаря данных прокси
             return {
-                'ping': latency_ms,
-                'emoji': status_emoji,
-                'link': tg_proxy_url,
-                'host': server
+                'ping_val': final_latency,
+                'visual': quality_emoji,
+                'connection_url': f"tg://proxy?server={target_server}&port={target_port}&secret={target_secret}",
+                'ip_address': target_server
             }
         else:
             return None
-    except:
+            
+    except Exception:
+        # Ошибки сокета игнорируем, просто считаем прокси мертвым
         return None
 
-def fetch_and_filter_proxies(limit_count=8):
+def master_proxy_fetcher(max_results=8):
     """
-    Собирает прокси из внешних баз и проводит многопоточный тест.
+    Основной агрегатор прокси. Собирает данные, фильтрует и возвращает лучшие.
     """
-    # Список надежных источников (GitHub)
-    source_urls = [
+    # Список надежных источников с GitHub (MTProto базы)
+    database_urls = [
         "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt",
-        "https://raw.githubusercontent.com/Hookzof/free-proxies/main/mtproto.txt"
+        "https://raw.githubusercontent.com/Hookzof/free-proxies/main/mtproto.txt",
+        "https://raw.githubusercontent.com/Proxy-List/Proxy-List/master/mtproto.txt",
+        "https://raw.githubusercontent.com/yebekhe/TelegramV2RayCollector/main/proxy/mtproto"
     ]
     
-    raw_proxies_list = []
+    aggregated_raw_data = []
     
     try:
-        for url in source_urls:
-            response = requests.get(url, timeout=7)
-            if response.status_code == 200:
-                # Поиск всех совпадений по формату MTProto
-                matches = re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', response.text)
-                raw_proxies_list.extend(matches)
+        # Сбор сырых данных из всех источников
+        for current_url in database_urls:
+            response_data = requests.get(current_url, timeout=12)
+            if response_data.status_code == 200:
+                # Регулярное выражение для парсинга параметров прокси
+                extracted = re.findall(r'server=([^&]+)&port=(\d+)&secret=([^&\s]+)', response_data.text)
+                aggregated_raw_data.extend(extracted)
         
-        # Удаление дубликатов через set
-        clean_list = list(set(raw_raw_proxies_list))
-        random.shuffle(clean_list)
+        # Очистка от дубликатов
+        unique_proxy_set = list(set(aggregated_raw_data))
+        random.shuffle(unique_proxy_set)
         
-        final_verified = []
+        final_valid_list = []
         
-        # Используем ThreadPoolExecutor для мгновенной проверки 150 прокси одновременно
-        with ThreadPoolExecutor(max_workers=60) as executor:
-            # Запускаем чекер в 60 потоков
-            test_results = list(executor.map(check_proxy_performance, clean_list[:150]))
+        # --- ИТЕРАЦИЯ 1: СТРОГИЙ ПОИСК (ОПТИМАЛЬНО ДЛЯ РФ) ---
+        # Используем ThreadPoolExecutor для параллельной проверки 80 прокси сразу
+        with ThreadPoolExecutor(max_workers=80) as master_executor:
+            # Маппинг функции проверки на список прокси
+            task_futures = [master_executor.submit(validate_proxy_node, p, True) for p in unique_proxy_set[:250]]
             
-        # Сбор только успешных результатов
-        for result in test_results:
-            if result is not None:
-                final_verified.append(result)
-                
-        # Сортировка по возрастанию пинга (самые быстрые вверху)
-        sorted_list = sorted(final_verified, key=lambda x: x['ping'])
+            for finished_task in as_completed(task_futures):
+                result_node = finished_task.result()
+                if result_node is not None:
+                    final_valid_list.append(result_node)
         
-        return sorted_list[:limit_count]
-    except Exception as e:
-        print(f"Ошибка загрузки базы прокси: {e}")
+        # --- ИТЕРАЦИЯ 2: АДАПТИВНЫЙ ПОИСК (ЕСЛИ МАЛО РЕЗУЛЬТАТОВ) ---
+        if len(final_valid_list) < 3:
+            with ThreadPoolExecutor(max_workers=80) as backup_executor:
+                backup_futures = [backup_executor.submit(validate_proxy_node, p, False) for p in unique_proxy_set[:200]]
+                for finished_backup in as_completed(backup_futures):
+                    backup_node = finished_backup.result()
+                    if backup_node is not None:
+                        final_valid_list.append(backup_node)
+        
+        # Сортировка по возрастанию пинга (самые быстрые в топе)
+        sorted_results = sorted(final_valid_list, key=lambda x: x['ping_val'])
+        
+        # Возвращаем нужное количество прокси
+        return sorted_results[:max_results]
+        
+    except Exception as fetch_error:
+        logger.error(f"Ошибка в мастер-загрузчике: {fetch_error}")
         return []
 
-# =========================================================
-# [ БЛОК 5: ВЕБ-ИНТЕРФЕЙС (FLASK SERVER) ]
-# =========================================================
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 4: ВЕБ-СЕРВЕР (FLASK) ДЛЯ МОНИТОРИНГА ]
+# ---------------------------------------------------------
+
 app = Flask(__name__)
 
-@app.route('/status')
-def status_page():
-    return "SERVER IS RUNNING", 200
-
-@app.route('/')
-def main_web_interface():
-    # Получаем 10 лучших прокси для сайта
-    web_list = fetch_and_filter_proxies(10)
-    
-    # Полная верстка без сокращений
-    html_template = """
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <title>PROXY HUNTER | OFFICIAL</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding: 25px; }
-            .main-container { max-width: 600px; margin: 0 auto; background-color: #1e293b; padding: 35px; border-radius: 30px; border: 1px solid #334155; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-            h1 { color: #38bdf8; font-size: 32px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 3px; }
-            .sub-title { color: #94a3b8; font-size: 14px; margin-bottom: 35px; }
-            .proxy-card { background-color: #334155; margin-bottom: 15px; padding: 20px; border-radius: 18px; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s ease; border: 1px solid transparent; }
-            .proxy-card:hover { border-color: #38bdf8; transform: translateY(-3px); }
-            .info { text-align: left; }
-            .ping-text { font-weight: bold; font-size: 20px; color: #f1f5f9; }
-            .host-text { color: #64748b; font-size: 12px; display: block; margin-top: 4px; }
-            .connect-button { background-color: #38bdf8; color: #0f172a; text-decoration: none; padding: 12px 25px; border-radius: 12px; font-weight: 800; font-size: 14px; transition: background 0.3s; }
-            .connect-button:hover { background-color: #7dd3fc; }
-            .refresh-btn { background-color: #f59e0b; color: white; border: none; padding: 18px 40px; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 25px; transition: opacity 0.3s; }
-            .refresh-btn:hover { opacity: 0.9; }
-        </style>
-    </head>
-    <body>
-        <div class="main-container">
-            <h1>🛰 PROXY HUNTER</h1>
-            <div class="sub-title">ОПТИМИЗИРОВАНО ДЛЯ РОССИИ 🇷🇺</div>
-            
-            {% for p in proxy_items %}
-            <div class="proxy-card">
-                <div class="info">
-                    <span class="ping-text">{{ p.emoji }} {{ p.ping }}ms</span>
-                    <span class="host-text">{{ p.host[:30] }}</span>
+# HTML шаблон для веб-страницы (максимально проработанный)
+HTML_LAYOUT = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>PROXY HUNTER WEB v14.3</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #f8fafc; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 30px; min-height: 100vh; }
+        .wrapper { max-width: 600px; margin: 0 auto; background: rgba(30, 41, 59, 0.8); padding: 40px; border-radius: 35px; border: 1px solid rgba(56, 189, 248, 0.2); backdrop-filter: blur(10px); }
+        h1 { color: #38bdf8; font-size: 36px; margin-bottom: 5px; text-shadow: 0 0 20px rgba(56, 189, 248, 0.4); }
+        .status-badge { display: inline-block; background: rgba(56, 189, 248, 0.1); color: #38bdf8; padding: 5px 15px; border-radius: 20px; font-size: 12px; margin-bottom: 30px; font-weight: bold; }
+        .proxy-container { display: flex; flex-direction: column; gap: 15px; }
+        .proxy-item { background: rgba(51, 65, 85, 0.6); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid transparent; transition: 0.3s; }
+        .proxy-item:hover { transform: scale(1.02); border-color: #38bdf8; background: rgba(51, 65, 85, 0.9); }
+        .proxy-info { text-align: left; }
+        .ping-label { font-size: 22px; font-weight: bold; }
+        .host-label { font-size: 11px; color: #94a3b8; display: block; margin-top: 5px; }
+        .action-link { background: #38bdf8; color: #0f172a; text-decoration: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3); }
+        .refresh-button { background: #f59e0b; color: white; border: none; padding: 20px; width: 100%; border-radius: 20px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 30px; transition: 0.3s; }
+        .refresh-button:hover { background: #fbbf24; box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <h1>🛰 PROXY HUNTER</h1>
+        <div class="status-badge">OPTIMIZED FOR RUSSIA 🇷🇺</div>
+        
+        <div class="proxy-container">
+            {% for item in list_of_proxies %}
+            <div class="proxy-item">
+                <div class="proxy-info">
+                    <span class="ping-label">{{ item.visual }} {{ item.ping_val }}ms</span>
+                    <span class="host-label">{{ item.ip_address[:30] }}</span>
                 </div>
-                <a href="{{ p.link }}" class="connect-button">ВКЛЮЧИТЬ</a>
+                <a href="{{ item.connection_url }}" class="action-link">ПОДКЛЮЧИТЬ</a>
             </div>
             {% endfor %}
-            
-            <button onclick="location.reload()" class="refresh-btn">ОБНОВИТЬ СПИСОК</button>
         </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html_template, proxy_items=web_list)
+        
+        <button onclick="location.reload()" class="refresh-button">ОБНОВИТЬ СПИСОК</button>
+    </div>
+</body>
+</html>
+"""
 
-# =========================================================
-# [ БЛОК 6: ГЛАВНЫЙ ОБРАБОТЧИК ТЕЛЕГРАМ БОТА ]
-# =========================================================
-@bot.message_handler(func=lambda message: True)
-def master_handler(message):
-    # Логируем каждое входящее сообщение
-    send_log(message)
+@app.route('/')
+def render_main_page():
+    """Эндпоинт для отображения веб-интерфейса"""
+    current_proxies = master_proxy_fetcher(12)
+    return render_template_string(HTML_LAYOUT, list_of_proxies=current_proxies)
+
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 5: ОБРАБОТЧИК КОМАНД ТЕЛЕГРАМ БОТА ]
+# ---------------------------------------------------------
+
+@bot.message_handler(func=lambda msg: True)
+def main_telegram_handler(msg):
+    """
+    Главный диспетчер всех входящих сообщений бота.
+    """
+    # 1. Логируем действие в канал логов
+    send_detailed_log(msg)
     
-    # Игнорируем сообщения без текста
-    if message.text is None:
+    # Игнорируем сообщения без текстового контента
+    if not msg.text:
         return
         
-    user_input = message.text
-    chat_id = message.chat.id
-    user_id = message.from_user.id
+    input_text = msg.text
+    user_id = msg.from_user.id
+    chat_id = msg.chat.id
     
-    # Обработка только команд
-    if user_input.startswith('/'):
-        # 1. Сначала проверяем подписку на канал
-        if is_subscribed(user_id) == False:
-            markup = telebot.types.InlineKeyboardMarkup()
-            sub_button = telebot.types.InlineKeyboardButton("🚀 Подписаться на канал", url=CHANNEL_URL)
-            markup.add(sub_button)
+    # Обработка только если сообщение начинается со слэша (команда)
+    if input_text.startswith('/'):
+        
+        # А) ПРОВЕРКА ПОДПИСКИ (Критически важный блок)
+        is_user_valid = check_user_subscription(user_id)
+        
+        if not is_user_valid:
+            # Создаем кнопку для подписки
+            sub_keyboard = telebot.types.InlineKeyboardMarkup()
+            btn_sub = telebot.types.InlineKeyboardButton("🚀 Подписаться на канал", url=SUBSCRIPTION_LINK)
+            sub_keyboard.add(btn_sub)
             
-            bot.send_message(
-                chat_id, 
-                "⚠️ **ОШИБКА ДОСТУПА!**\n\nЧтобы пользоваться ботом и получать рабочие прокси, вам нужно подписаться на наш официальный канал.", 
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
+            rejection_text = "⚠️ **ДОСТУП ЗАБЛОКИРОВАН**\n\n"
+            rejection_text += "Чтобы пользоваться услугами Proxy Hunter и получать самые свежие прокси, "
+            rejection_text += "необходимо быть участником нашего сообщества."
+            
+            bot.send_message(chat_id, rejection_text, reply_markup=sub_keyboard, parse_mode="Markdown")
             return
             
-        # Определяем саму команду
-        command_name = user_input.split()[0].lower()
+        # Б) РАЗБОР КОМАНД
+        base_command = input_text.split()[0].lower()
         
-        # --- [ КОМАНДА /START ] ---
-        if command_name == '/start':
-            start_text = "🦾 **WELCOME TO PROXY HUNTER v14.3**\n\n"
-            start_text += "Я нахожу лучшие MTProto прокси, которые работают даже в условиях блокировок.\n\n"
-            start_text += "🛰 /get — Получить список прокси\n"
-            start_text += "❓ /help — Помощь и контакты"
-            bot.send_message(chat_id, start_text, parse_mode="Markdown")
+        # Команда СТАРТ
+        if base_command == '/start':
+            welcome_text = "🦾 **ДОБРО ПОЖАЛОВАТЬ В PROXY HUNTER v14.3**\n\n"
+            welcome_text += "Я — профессиональный бот для поиска прокси, оптимизированный под работу в РФ.\n\n"
+            welcome_text += "🛰 /get — Сгенерировать список прокси\n"
+            welcome_text += "❓ /help — Справка и техподдержка"
+            bot.send_message(chat_id, welcome_text, parse_mode="Markdown")
             
-        # --- [ КОМАНДА /GET ] ---
-        elif command_name == '/get':
-            progress_msg = bot.send_message(chat_id, "🛰 **Запуск сканирования...**\nПроверяю узлы на доступность из РФ.")
+        # Команда ПОЛУЧИТЬ ПРОКСИ
+        elif base_command == '/get':
+            # Отправляем временное сообщение, чтобы юзер видел процесс
+            loading_message = bot.send_message(chat_id, "🛰 **Поиск активных узлов...**\nПожалуйста, подождите, я проверяю пинг.")
             
-            fresh_proxies = fetch_and_filter_proxies(6)
+            # Получаем прокси через мастер-загрузчик
+            final_selection = master_proxy_fetcher(6)
             
-            if len(fresh_proxies) > 0:
-                result_text = "📡 **АКТУАЛЬНЫЕ MTPROTO ДЛЯ РФ:**\n\n"
-                for p in fresh_proxies:
-                    result_text += f"{p['emoji']} **{p['ping']}ms** — [ПОДКЛЮЧИТЬ]({p['link']})\n\n"
+            if final_selection:
+                response_payload = "📡 **АКТУАЛЬНЫЕ MTPROTO ДЛЯ РФ:**\n\n"
+                for entry in final_selection:
+                    response_payload += f"{entry['visual']} **{entry['ping_val']}ms** — [ПОДКЛЮЧИТЬ]({entry['connection_url']})\n\n"
                 
+                # Обновляем сообщение со списком
                 bot.edit_message_text(
-                    text=result_text,
+                    text=response_payload,
                     chat_id=chat_id,
-                    message_id=progress_msg.message_id,
+                    message_id=loading_message.message_id,
                     parse_mode="Markdown",
                     disable_web_page_preview=True
                 )
             else:
                 bot.edit_message_text(
-                    text="❌ **ПРОКСИ НЕ НАЙДЕНЫ**\nПопробуйте обновить список через минуту.",
+                    text="❌ **ПРОКСИ НЕ НАЙДЕНЫ**\nВ данный момент все узлы проходят проверку. Повторите попытку позже.",
                     chat_id=chat_id,
-                    message_id=progress_msg.message_id
+                    message_id=loading_message.message_id
                 )
                 
-        # --- [ КОМАНДА /HELP ] ---
-        elif command_name == '/help':
-            help_info = "🛰 **ИНФОРМАЦИЯ И ПОДДЕРЖКА**\n\n"
-            help_info += f"🌐 Наш веб-сайт: {WEB_URL}\n"
-            help_info += "🛰 Команда `/get` — выдает 6 самых быстрых прокси.\n\n"
-            help_info += f"🛠 Тех. поддержка: @Ovekin_777_bot\n"
-            help_info += f"👑 Владелец: @{ADMIN_USERNAME}"
+        # Команда ПОМОЩЬ
+        elif base_command == '/help':
+            help_payload = "🛰 **ИНФОРМАЦИЯ И КОНТАКТЫ**\n\n"
+            help_payload += f"🌐 **Веб-версия:** {PROJECT_WEB_LINK}\n"
+            help_payload += "🛰 **Описание:** Бот ищет только те прокси, которые имеют маскировку для обхода систем DPI.\n\n"
+            help_payload += f"🛠 **Поддержка:** {SUPPORT_USER}\n"
+            help_payload += f"👑 **Администратор:** @{ADMIN_NICKNAME}"
             
-            bot.send_message(chat_id, help_info, parse_mode="Markdown", disable_web_page_preview=True)
+            bot.send_message(chat_id, help_payload, parse_mode="Markdown", disable_web_page_preview=True)
 
-        # --- [ БЛОК АДМИНИСТРАТОРА ] ---
-        elif command_name == '/admin':
-            if message.from_user.username == ADMIN_USERNAME:
-                admin_msg = "👑 **ПАНЕЛЬ УПРАВЛЕНИЯ АДМИНА**\n\n"
-                admin_msg += "Используйте `/post`, чтобы опубликовать свежие прокси в канал."
-                bot.send_message(chat_id, admin_msg, parse_mode="Markdown")
-            else:
-                bot.send_message(chat_id, "❌ У вас нет прав доступа к этой команде.")
-
-        elif command_name == '/post':
-            if message.from_user.username == ADMIN_USERNAME:
-                notif = bot.send_message(chat_id, "⏳ Подготовка публикации...")
-                post_items = fetch_and_filter_proxies(5)
+        # Команда ПОСТ ДЛЯ КАНАЛА (Только для админа)
+        elif base_command == '/post':
+            if msg.from_user.username == ADMIN_NICKNAME:
+                preparing_notif = bot.send_message(chat_id, "⏳ Генерирую пост для канала...")
                 
-                if post_items:
-                    post_content = "🛰 **СВЕЖИЙ ПАК РАБОЧИХ ПРОКСИ**\n\n"
-                    for item in post_items:
-                        post_content += f"{item['emoji']} Пинг: {item['ping']}ms\n🔗 {item['link']}\n\n"
+                post_proxies = master_proxy_fetcher(5)
+                
+                if post_proxies:
+                    final_post = "🛰 **НОВЫЙ ПАКЕТ MTPROTO ПРОКСИ**\n\n"
+                    for item in post_proxies:
+                        final_post += f"{item['visual']} Пинг: **{item['ping_val']}ms**\n🔗 {item['connection_url']}\n\n"
                     
-                    post_content += f"🌐 Весь список онлайн: {WEB_URL}"
+                    final_post += f"🌐 Весь список в реальном времени: {PROJECT_WEB_LINK}"
                     
-                    bot.send_message(CHANNEL_ID, post_content, parse_mode="Markdown", disable_web_page_preview=True)
-                    bot.edit_message_text("✅ Пост успешно опубликован в канале!", chat_id, notif.message_id)
+                    # Отправка в основной канал
+                    bot.send_message(PRIMARY_CHANNEL, final_post, parse_mode="Markdown", disable_web_page_preview=True)
+                    bot.edit_message_text("✅ Пост успешно опубликован!", chat_id, preparing_notif.message_id)
                 else:
-                    bot.edit_message_text("❌ Ошибка генерации пака.", chat_id, notif.message_id)
+                    bot.edit_message_text("❌ Ошибка при генерации поста.", chat_id, preparing_notif.message_id)
+            else:
+                bot.send_message(chat_id, "⛔️ У вас нет прав для выполнения данной команды.")
 
-# =========================================================
-# [ БЛОК 7: ЗАПУСК И ОБХОД ОГРАНИЧЕНИЙ RENDER ]
-# =========================================================
-def start_polling_process():
-    """Запускает бота с задержкой, чтобы не конфликтовать с портами"""
-    time.sleep(15) 
-    print(">>> Telegram Bot активирован.")
+# ---------------------------------------------------------
+# [ РАЗДЕЛ 6: ТОЧКА ВХОДА И ЗАПУСК СЕРВИСОВ ]
+# ---------------------------------------------------------
+
+def execute_bot_polling():
+    """Запускает бесконечный цикл опроса Telegram API"""
+    # Небольшая пауза для корректной инициализации на Render
+    time.sleep(15)
+    logger.info("Запуск Telegram Polling...")
     try:
-        bot.polling(none_stop=True, interval=0, timeout=60)
-    except Exception as e:
-        print(f"Критический сбой бота: {e}")
+        bot.polling(none_stop=True, interval=0, timeout=50)
+    except Exception as fatal_error:
+        logger.error(f"Критический сбой в Polling: {fatal_error}")
         time.sleep(10)
+        # Рекурсивный перезапуск при сбое
+        execute_bot_polling()
 
 if __name__ == "__main__":
-    # 1. Запускаем бота в отдельном независимом потоке
-    bot_system_thread = Thread(target=start_polling_process)
-    bot_system_thread.daemon = True
-    bot_system_thread.start()
+    # 1. Запуск потока бота
+    bot_thread = Thread(target=execute_bot_polling)
+    bot_thread.daemon = True
+    bot_thread.start()
     
-    # 2. Определяем порт для Render
-    render_port_env = os.environ.get("PORT", "8080")
-    active_port = int(render_port_env)
+    # 2. Определение порта для Render
+    web_port = int(os.environ.get("PORT", 8080))
     
-    print(f">>> Запуск Flask-сервера на порту: {active_port}")
+    logger.info(f"Запуск веб-сервера на порту {web_port}")
     
-    # 3. Запускаем веб-часть в основном потоке
+    # 3. Запуск Flask в основном потоке
     try:
-        # debug=False обязателен для работы в многопоточности на Render
-        app.run(host='0.0.0.0', port=active_port, debug=False, use_reloader=False)
-    except Exception as flask_error:
-        print(f"Критический сбой веб-сервера: {flask_error}")
+        app.run(host='0.0.0.0', port=web_port, debug=False, use_reloader=False)
+    except Exception as flask_fatal:
+        logger.error(f"Критический сбой Flask: {flask_fatal}")
