@@ -19,7 +19,7 @@ from threading import Thread, Lock
 # [ РАЗДЕЛ 1: КОНФИГУРАЦИЯ ]
 # ---------------------------------------------------------
 
-TOKEN = '8764406808:AAESVgV_PKemfwMaN5bdwiH3rgtXeYyMYOs'
+TOKEN = '8764406808:AAGksp-skBypDJemRA9gESpXECwUVXPbesU'
 ADMIN_USERNAME = "PR1SM_777" 
 SUPPORT_TAG = "@Ovekin_777_bot" 
 CHANNEL_ID = "@proxy_timoxa" 
